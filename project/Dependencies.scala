@@ -10,8 +10,6 @@ object Dependencies {
     "org.legogroup"   %% "woof-core"   % "0.4.6",
   )
 
-  private val MockitoScalaVer = "1.17.12"
-
   private lazy val test = Seq(
     "org.scalameta" %% "munit"               % "0.7.29",
     "org.typelevel" %% "munit-cats-effect-3" % "1.0.7",

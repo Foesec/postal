@@ -25,9 +25,6 @@ class OutboxPublisher(
     codec: OutboxRecord => ProducerRecord[Option[String], Array[Byte]],
 ) extends DefaultIOLogging {
 
-  val WriteChunkSize = 20
-  val WriteMaxDelay  = 500.millis
-
   import org.legogroup.woof.given_LogInfo
 
   def run = {
@@ -59,9 +56,7 @@ class OutboxPublisher(
           .produce(records)
           .flatten
           .onError { t =>
-            logger.map(
-              _.error(s"Failed to publish records $records: $t"),
-            )
+            logger.error(s"Failed to publish records $records: $t")
           }
           .attempt
       }
@@ -72,14 +67,13 @@ class OutboxPublisher(
   protected val markPublished: Pipe[IO, ProducerResult[OutboxRecord, Option[
     String,
   ], Array[Byte]], Unit] =
-    _.groupWithin(WriteChunkSize, WriteMaxDelay).evalMap {
+    _.groupWithin(pCfg.writebackChunkSize, pCfg.writebackMaxDelay).evalMap {
       _.toNel match
         case Some(results) =>
           for {
             count <- outboxRecordDao.setPublished(results.map(_.passthrough.id))
-            log   <- logger
-            _     <- log.trace(s"Committed $count messages as published")
+            _     <- logger.trace(s"Committed $count messages as published")
           } yield ()
-        case None => logger.flatMap(_.warn("Received empty chunk"))
+        case None => logger.warn("Received empty chunk to commit")
     }
 }

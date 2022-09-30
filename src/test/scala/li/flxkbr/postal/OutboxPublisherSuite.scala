@@ -7,6 +7,7 @@ import li.flxkbr.postal.config.OutboxPublisherConfig
 import li.flxkbr.postal.db.{OutboxRecord, RecordId}
 import li.flxkbr.postal.testkit.*
 import cats.effect.IO
+import cats.effect.kernel.Outcome.*
 import fs2.kafka.ProducerRecord
 
 class OutboxPublisherSuite extends munit.CatsEffectSuite {
@@ -48,6 +49,8 @@ class OutboxPublisherSuite extends munit.CatsEffectSuite {
       rate = 5.seconds,
       maxMessages = 100,
       publisherParallelism = 1,
+      writebackChunkSize = 20,
+      writebackMaxDelay = 200.millis
     )
     given (OutboxRecord => ProducerRecord[Option[String], Array[Byte]]) =
       record => ProducerRecord("nopic", None, record.message)
@@ -59,13 +62,12 @@ class OutboxPublisherSuite extends munit.CatsEffectSuite {
     assume(prod.Counts.produce == 0)
 
     for {
-      switchAndHandle <- publisher.run
-      _               <- IO.sleep(2.second)
+      killswitch <- publisher.run
+      _          <- IO.sleep(2.second)
       _ = assert(dao.Counts.unpublishedStream == 1)
       _ = assert(dao.Counts.setPublished > 0)
       _ = assert(prod.Counts.produce == 5)
-      hasCompleted <- switchAndHandle._1.complete(())
-      outcome      <- switchAndHandle._2
-    } yield assert(hasCompleted)
+      outcome <- killswitch.term()
+    } yield assertEquals(outcome, Succeeded(IO.unit))
   }
 }
