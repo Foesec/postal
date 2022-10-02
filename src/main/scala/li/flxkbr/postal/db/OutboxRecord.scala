@@ -16,7 +16,8 @@ object RecordId {
 
 final case class OutboxRecord(
     id: RecordId,
-    message: Array[Byte],
+    key: Option[Array[Byte]],
+    value: Array[Byte],
     createdTs: Instant,
     publishedTs: Option[Instant],
 ) {
@@ -29,13 +30,19 @@ final case class OutboxRecord(
 object OutboxRecord {
 
   given Show[OutboxRecord] = Show
-    .show(rec => s"{${rec.id}: ${rec.message}, ${rec.createdTs.getEpochSecond}, ${if rec.publishedTs.isDefined then "published" else "unpublished"}}")
-
-  given writeAutoId: Write[OutboxRecord] =
-    Write[(Array[Byte], Instant, Option[Instant])].contramap(r =>
-      (r.message, r.createdTs, r.publishedTs),
+    .show(rec =>
+      s"{${rec.id}: ${rec.key}/${rec.value}, ${rec.createdTs.getEpochSecond}, " +
+        s"${if rec.publishedTs.isDefined then "published" else "unpublished"}}",
     )
 
-  def makeNew(message: Array[Byte], createdTs: Instant): OutboxRecord =
-    OutboxRecord(RecordId.Zero, message, createdTs, None)
+  given writeAutoId: Write[OutboxRecord] =
+    Write[(Option[Array[Byte]], Array[Byte], Instant, Option[Instant])]
+      .contramap(r => (r.key, r.value, r.createdTs, r.publishedTs))
+
+  def makeNew(
+      key: Option[Array[Byte]],
+      value: Array[Byte],
+      createdTs: Instant,
+  ): OutboxRecord =
+    OutboxRecord(RecordId.Zero, key, value, createdTs, None)
 }

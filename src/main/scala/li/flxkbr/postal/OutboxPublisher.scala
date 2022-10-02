@@ -19,10 +19,10 @@ import org.legogroup.woof.LogLevel
 
 class OutboxPublisher(
     outboxRecordDao: OutboxRecordDAO,
-    kafkaProducer: KafkaProducer[IO, Option[String], Array[Byte]],
+    kafkaProducer: KafkaProducer[IO, Option[Array[Byte]], Array[Byte]],
 )(using
     pCfg: OutboxPublisherConfig,
-    codec: OutboxRecord => ProducerRecord[Option[String], Array[Byte]],
+    codec: OutboxRecord => ProducerRecord[Option[Array[Byte]], Array[Byte]],
 ) extends DefaultIOLogging {
 
   import org.legogroup.woof.given_LogInfo
@@ -37,8 +37,7 @@ class OutboxPublisher(
         ) >> outboxRecordDao.unpublishedStream.take(pCfg.maxMessages))
         .loggedShow(LogLevel.Info)
         .through(publish)
-        .loggedRaw()
-        .through(markPublished)
+        .through(writebackPublished)
         .interruptWhen(switch.get.attempt)
         .compile
         .drain
@@ -48,7 +47,7 @@ class OutboxPublisher(
 
   protected val publish
       : Pipe[IO, OutboxRecord, ProducerResult[OutboxRecord, Option[
-        String,
+        Array[Byte],
       ], Array[Byte]]] =
     _.map { rec => ProducerRecords.one(codec(rec), rec) }
       .parEvalMapUnordered(pCfg.publisherParallelism) { records =>
@@ -64,9 +63,11 @@ class OutboxPublisher(
         result
       }
 
-  protected val markPublished: Pipe[IO, ProducerResult[OutboxRecord, Option[
-    String,
-  ], Array[Byte]], Unit] =
+  protected val writebackPublished: Pipe[IO, ProducerResult[
+    OutboxRecord,
+    Option[Array[Byte]],
+    Array[Byte],
+  ], Unit] =
     _.groupWithin(pCfg.writebackChunkSize, pCfg.writebackMaxDelay).evalMap {
       _.toNel match
         case Some(results) =>

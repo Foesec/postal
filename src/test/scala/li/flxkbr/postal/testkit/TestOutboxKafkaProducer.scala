@@ -8,12 +8,14 @@ import org.apache.kafka.clients.producer.internals.ProducerMetadata
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.common.TopicPartition
 import scala.util.Random
+import li.flxkbr.postal.db.RecordId
 
 class TestOutboxKafkaProducer()
     extends KafkaProducer[IO, Option[String], Array[Byte]] {
 
   object Counts {
-    var produce: Int = 0
+    var produce: Int                   = 0
+    var producedRecords: Seq[RecordId] = Seq.empty
   }
 
   override def produce[P](
@@ -34,7 +36,7 @@ class TestOutboxKafkaProducer()
         ),
       )
     }
-    IO(IO(ProducerResult(prs, records.passthrough)))
+    IO.pure(IO.pure(ProducerResult(prs, records.passthrough)))
   }
 
 }

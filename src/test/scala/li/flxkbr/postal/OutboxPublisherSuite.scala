@@ -67,7 +67,7 @@ class OutboxPublisherSuite extends munit.CatsEffectSuite {
       _ = assert(dao.Counts.unpublishedStream == 1)
       _ = assert(dao.Counts.setPublished > 0)
       _ = assert(prod.Counts.produce == 5)
-      outcome <- killswitch.term()
+      outcome <- killswitch.kill(5.seconds)
     } yield assertEquals(outcome, Succeeded(IO.unit))
   }
 }
