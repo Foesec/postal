@@ -11,7 +11,7 @@ import scala.util.Random
 import li.flxkbr.postal.db.RecordId
 
 class TestOutboxKafkaProducer()
-    extends KafkaProducer[IO, Option[String], Array[Byte]] {
+    extends KafkaProducer[IO, Option[Array[Byte]], Array[Byte]] {
 
   object Counts {
     var produce: Int                   = 0
@@ -19,8 +19,8 @@ class TestOutboxKafkaProducer()
   }
 
   override def produce[P](
-      records: ProducerRecords[P, Option[String], Array[Byte]],
-  ): IO[IO[ProducerResult[P, Option[String], Array[Byte]]]] = {
+      records: ProducerRecords[P, Option[Array[Byte]], Array[Byte]],
+  ): IO[IO[ProducerResult[P, Option[Array[Byte]], Array[Byte]]]] = {
     Counts.produce = Counts.produce + 1
     val prs = records.records.map { record =>
       (

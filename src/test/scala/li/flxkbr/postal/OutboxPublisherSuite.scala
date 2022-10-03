@@ -16,27 +16,31 @@ class OutboxPublisherSuite extends munit.CatsEffectSuite {
 
     val createdTs = Instant.parse("2007-12-03T10:15:30.00Z")
     val unpublishedRecords = Seq(
-      OutboxRecord(RecordId(1), "hello".getBytes(), createdTs, None),
+      OutboxRecord(RecordId(1), None, "hello".getBytes(), createdTs, None),
       OutboxRecord(
         RecordId(2),
+        None,
         "goodb".getBytes(),
         createdTs.plusSeconds(2),
         None,
       ),
       OutboxRecord(
         RecordId(3),
+        None,
         "12345".getBytes(),
         createdTs.plusSeconds(4),
         None,
       ),
       OutboxRecord(
         RecordId(4),
+        None,
         "xyzab".getBytes(),
         createdTs.plusSeconds(8),
         None,
       ),
       OutboxRecord(
         RecordId(5),
+        None,
         "abcxy".getBytes(),
         createdTs.plusSeconds(16),
         None,
@@ -50,10 +54,10 @@ class OutboxPublisherSuite extends munit.CatsEffectSuite {
       maxMessages = 100,
       publisherParallelism = 1,
       writebackChunkSize = 20,
-      writebackMaxDelay = 200.millis
+      writebackMaxDelay = 200.millis,
     )
-    given (OutboxRecord => ProducerRecord[Option[String], Array[Byte]]) =
-      record => ProducerRecord("nopic", None, record.message)
+    given (OutboxRecord => ProducerRecord[Option[Array[Byte]], Array[Byte]]) =
+      record => ProducerRecord("nopic", record.key, record.value)
 
     val publisher = OutboxPublisher(dao, prod)
 
