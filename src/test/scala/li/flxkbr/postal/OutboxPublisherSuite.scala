@@ -74,4 +74,8 @@ class OutboxPublisherSuite extends munit.CatsEffectSuite {
       outcome <- killswitch.kill(5.seconds)
     } yield assertEquals(outcome, Succeeded(IO.unit))
   }
+
+  test("outbox publisher handles failed publishing") {
+    fail("todo")
+  }
 }

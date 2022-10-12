@@ -29,7 +29,7 @@ class TestOutboxRecordDAO(unpublishedRecords: Seq[OutboxRecord])
   ): IO[Int] = {
     println("Calling setPublished")
     Counts.setPublished = Counts.setPublished + 1
-    IO(ids.size)
+    IO.pure(ids.size)
   }
 
 }
