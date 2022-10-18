@@ -8,56 +8,70 @@ import li.flxkbr.postal.db.{OutboxRecord, RecordId}
 import li.flxkbr.postal.testkit.*
 import cats.effect.IO
 import cats.effect.kernel.Outcome.*
-import fs2.kafka.ProducerRecord
+import fs2.kafka.{KafkaProducer, ProducerRecord}
 
 class OutboxPublisherSuite extends munit.CatsEffectSuite {
 
+  val createdTs = Instant.parse("2007-12-03T10:15:30.00Z")
+
+  val unpublishedRecords = Seq(
+    OutboxRecord(
+      RecordId(1),
+      "nopic",
+      None,
+      "hello".getBytes(),
+      createdTs,
+      None,
+    ),
+    OutboxRecord(
+      RecordId(2),
+      "nopic",
+      None,
+      "goodb".getBytes(),
+      createdTs.plusSeconds(2),
+      None,
+    ),
+    OutboxRecord(
+      RecordId(3),
+      "nopic",
+      None,
+      "12345".getBytes(),
+      createdTs.plusSeconds(4),
+      None,
+    ),
+    OutboxRecord(
+      RecordId(4),
+      "nopic",
+      None,
+      "xyzab".getBytes(),
+      createdTs.plusSeconds(8),
+      None,
+    ),
+    OutboxRecord(
+      RecordId(5),
+      "nopic",
+      None,
+      "abcxy".getBytes(),
+      createdTs.plusSeconds(16),
+      None,
+    ),
+  )
+
+  given (OutboxRecord => ProducerRecord[Option[Array[Byte]], Array[Byte]]) =
+    record => ProducerRecord(record.topic, record.key, record.value)
+
+  given OutboxPublisherConfig = OutboxPublisherConfig(
+    rate = 5.seconds,
+    maxMessages = 100,
+    publisherParallelism = 1,
+    writebackChunkSize = 20,
+    writebackMaxDelay = 100.millis,
+  )
+
   test("outbox publisher correctly runs") {
 
-    val createdTs = Instant.parse("2007-12-03T10:15:30.00Z")
-    val unpublishedRecords = Seq(
-      OutboxRecord(RecordId(1), None, "hello".getBytes(), createdTs, None),
-      OutboxRecord(
-        RecordId(2),
-        None,
-        "goodb".getBytes(),
-        createdTs.plusSeconds(2),
-        None,
-      ),
-      OutboxRecord(
-        RecordId(3),
-        None,
-        "12345".getBytes(),
-        createdTs.plusSeconds(4),
-        None,
-      ),
-      OutboxRecord(
-        RecordId(4),
-        None,
-        "xyzab".getBytes(),
-        createdTs.plusSeconds(8),
-        None,
-      ),
-      OutboxRecord(
-        RecordId(5),
-        None,
-        "abcxy".getBytes(),
-        createdTs.plusSeconds(16),
-        None,
-      ),
-    )
     val dao  = TestOutboxRecordDAO(unpublishedRecords)
     val prod = TestOutboxKafkaProducer()
-
-    given OutboxPublisherConfig = OutboxPublisherConfig(
-      rate = 5.seconds,
-      maxMessages = 100,
-      publisherParallelism = 1,
-      writebackChunkSize = 20,
-      writebackMaxDelay = 200.millis,
-    )
-    given (OutboxRecord => ProducerRecord[Option[Array[Byte]], Array[Byte]]) =
-      record => ProducerRecord("nopic", record.key, record.value)
 
     val publisher = OutboxPublisher(dao, prod)
 
@@ -76,6 +90,22 @@ class OutboxPublisherSuite extends munit.CatsEffectSuite {
   }
 
   test("outbox publisher handles failed publishing") {
-    fail("todo")
+
+    given OutboxPublisherConfig = OutboxPublisherConfig(
+      rate = 500.millis,
+      maxMessages = 100,
+      publisherParallelism = 1,
+      writebackChunkSize = 20,
+      writebackMaxDelay = 100.millis,
+    )
+
+    val dao  = TestOutboxRecordDAO(unpublishedRecords)
+    val prod = TestOutboxKafkaProducer(_ == 1) // fail the first invokation
+
+    val publisher = OutboxPublisher(dao, prod)
+
+    assume(dao.Counts.unpublishedStream == 0)
+    assume(dao.Counts.setPublished == 0)
+    assume(prod.Counts.produce == 0)
   }
 }

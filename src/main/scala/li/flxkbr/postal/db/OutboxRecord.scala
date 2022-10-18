@@ -16,6 +16,7 @@ object RecordId {
 
 final case class OutboxRecord(
     id: RecordId,
+    topic: String,
     key: Option[Array[Byte]],
     value: Array[Byte],
     createdTs: Instant,
@@ -40,9 +41,10 @@ object OutboxRecord {
       .contramap(r => (r.key, r.value, r.createdTs, r.publishedTs))
 
   def makeNew(
+      topic: String,
       key: Option[Array[Byte]],
       value: Array[Byte],
       createdTs: Instant,
   ): OutboxRecord =
-    OutboxRecord(RecordId.Zero, key, value, createdTs, None)
+    OutboxRecord(RecordId.Zero, topic, key, value, createdTs, None)
 }

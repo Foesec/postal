@@ -1,18 +1,17 @@
 package li.flxkbr.postal.testkit
 
-import fs2.kafka.KafkaProducer
-import cats.effect.IO
-import fs2.kafka.ProducerRecords
-import fs2.kafka.ProducerResult
-import org.apache.kafka.clients.producer.internals.ProducerMetadata
-import org.apache.kafka.clients.producer.RecordMetadata
-import org.apache.kafka.common.TopicPartition
 import scala.util.Random
-import li.flxkbr.postal.db.RecordId
 
-class TestOutboxKafkaProducer(
-    successDecider: PartialFunction[Any, Boolean] = _ => true,
-) extends KafkaProducer[IO, Option[Array[Byte]], Array[Byte]] {
+import li.flxkbr.postal.OutboxKafkaProducer
+import li.flxkbr.postal.db.RecordId
+import cats.effect.IO
+import fs2.kafka.{KafkaProducer, ProducerRecords, ProducerResult}
+import org.apache.kafka.clients.producer.RecordMetadata
+import org.apache.kafka.clients.producer.internals.ProducerMetadata
+import org.apache.kafka.common.TopicPartition
+
+class TestOutboxKafkaProducer(failingInvokation: Int => Boolean = _ => false)
+    extends OutboxKafkaProducer {
 
   object Counts {
     var produce: Int         = 0
@@ -23,13 +22,10 @@ class TestOutboxKafkaProducer(
       records: ProducerRecords[P, Option[Array[Byte]], Array[Byte]],
   ): IO[IO[ProducerResult[P, Option[Array[Byte]], Array[Byte]]]] = {
     Counts.produce = Counts.produce + 1
-    Counts.producedRecords = Counts.producedRecords + records.records.size
 
-    if records.records
-        .indexWhere(r => !successDecider.orElse(_ => false)(r))
-        .isDefined
-    then IO.raiseError(Exception("boom"))
+    if failingInvokation(Counts.produce) then IO.raiseError(Exception("boom"))
     else
+      Counts.producedRecords = Counts.producedRecords + records.records.size
       val prs = records.records.map { record =>
         (
           record,

@@ -32,7 +32,7 @@ class OutboxImpl[F[_]: MonadCancelThrow](xa: Transactor[F], outboxRecordDao: Out
     for {
       key   <- key.map(kser.serialize(topic, headers, _)).sequence
       value <- vser.serialize(topic, headers, value)
-      record = OutboxRecord.makeNew(key, value, Instant.now())
+      record = OutboxRecord.makeNew(topic, key, value, Instant.now())
       businessRes <- {
         for {
           businessRes <- write
