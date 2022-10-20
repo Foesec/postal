@@ -28,16 +28,13 @@ class OutboxPublisher(
 
   import org.legogroup.woof.given_LogInfo
 
-  def run = {
+  def run: IO[KillSwitch[Unit]] = {
     for {
-      switch <- Deferred[IO, Unit]
-      handle <- {
-        buildRestartingStream
-          .interruptWhen(switch.get.attempt)
-          .compile
-          .drain
-          .start
-      }
+      _      <- logger.info("run stream...")
+      switch <- Ref.of[IO, Boolean](false)
+      _      <- logger.info("ref initialized, building stream")
+      handle <- buildRestartingAlt(switch).compile.drain.start
+      _      <- logger.info("stream built and started...")
     } yield KillSwitch("outbox-publisher", switch, handle)
   }
 
@@ -52,7 +49,36 @@ class OutboxPublisher(
       .recoverWith { case NonFatal(t) =>
         buildRestartingStream
       }
+  }
 
+  protected def buildRestartingAlt(
+      sigTerm: Ref[IO, Boolean],
+  ): Stream[IO, Unit] =
+    Stream
+      .repeatEval {
+        for {
+          term <- sigTerm.get
+          _ <-
+            if term then
+              logger.info(
+                "Outbox publisher stream received received termination signal. Will shut down",
+              )
+            else IO.unit
+        } yield term
+      }
+      .takeWhile(_ == false)
+      .meteredStartImmediately(pCfg.rate) >> outboxRecordDao.unpublishedStream
+      .take(
+        pCfg.maxMessages,
+      )
+      .loggedShow(LogLevel.Info)
+      .through(publishAndWriteback)
+      .recoverWith { case NonFatal(t) =>
+        buildRestartingAlt(sigTerm)
+      }
+
+  protected def cancelableDelay = {
+    IO.sleep(pCfg.rate)
   }
 
   protected val publishAndWriteback: Pipe[IO, OutboxRecord, Unit] =

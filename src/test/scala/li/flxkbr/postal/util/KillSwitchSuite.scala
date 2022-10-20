@@ -1,9 +1,9 @@
 package li.flxkbr.postal.util
 
 import scala.concurrent.duration.{Duration, DurationInt}
-
 import cats.effect.IO
 import cats.effect.kernel.{Deferred, Outcome}
+
 import java.util.concurrent.TimeoutException
 import li.flxkbr.postal.testkit.ExtendedAssertions
 import cats.effect.kernel.Ref
@@ -12,6 +12,8 @@ import cats.effect.kernel.Outcome.Errored
 import cats.effect.kernel.Outcome.Canceled
 import li.flxkbr.postal.log.DefaultIOLogging
 
+import scala.annotation.tailrec
+
 class KillSwitchSuite
     extends munit.CatsEffectSuite
     with ExtendedAssertions
@@ -19,16 +21,32 @@ class KillSwitchSuite
 
   import org.legogroup.woof.given_LogInfo
 
-  test("killswitch term() terminates associated task") {
+  test("ref-killswitch term() terminates associated task") {
+    for {
+      sig <- Ref.of[IO, Boolean](false)
+      handle <- {
+        def rep(ref: Ref[IO, Boolean]): IO[Unit] =
+          for
+            done <- ref.get
+            u    <- if done then IO.unit else IO.sleep(100.millis) >> rep(ref)
+          yield u
+        rep(sig).start
+      }
+      ks = KillSwitch("ks-term-test-1", sig, handle)
+      outcome <- ks.term.timeoutAndForget(2.seconds)
+    } yield assertEquals(outcome, Outcome.succeeded(IO.unit))
+  }
+
+  test("deferred-killswitch term() terminates associated task") {
     for {
       switch <- Deferred[IO, Unit]
       handle <- switch.get.start
       ks = KillSwitch("ks-term-test-1", switch, handle)
-      outcome <- ks.term().timeoutAndForget(2.seconds)
+      outcome <- ks.term.timeoutAndForget(2.seconds)
     } yield assertEquals(outcome, Outcome.succeeded(IO.unit))
   }
 
-  test("killswitch kill() terminates associated task within timeout") {
+  test("deferred-killswitch kill() terminates associated task within timeout") {
     for {
       switch <- Deferred[IO, Unit]
       handle <- (IO.sleep(500.millis) >> switch.get).start
@@ -37,7 +55,7 @@ class KillSwitchSuite
     } yield assertEquals(outcome, Outcome.succeeded(IO.unit))
   }
 
-  test("killswitch kill() cancels associated tasks after timeout") {
+  test("deferred-killswitch kill() cancels associated tasks after timeout") {
     for {
       switch       <- Deferred[IO, Unit] // dummy, doesnt do anything
       verifyCancel <- Ref[IO].of(false)  // ref to check if cancelled
@@ -57,7 +75,9 @@ class KillSwitchSuite
     }
   }
 
-  test("killswitch kill() does not await cancel if awaitCancel = false") {
+  test(
+    "deferred-killswitch kill() does not await cancel if awaitCancel = false",
+  ) {
     for {
       switch       <- Deferred[IO, Unit] // dummy, doesnt do anything
       verifyCancel <- Ref[IO].of(false)  // ref to check if cancelled

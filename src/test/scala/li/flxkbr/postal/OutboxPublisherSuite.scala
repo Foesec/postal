@@ -61,11 +61,11 @@ class OutboxPublisherSuite extends munit.CatsEffectSuite {
     record => ProducerRecord(record.topic, record.key, record.value)
 
   given OutboxPublisherConfig = OutboxPublisherConfig(
-    rate = 5.seconds,
+    rate = 2.seconds,
     maxMessages = 100,
     publisherParallelism = 1,
     writebackChunkSize = 20,
-    writebackMaxDelay = 100.millis,
+    writebackMaxDelay = 50.millis,
   )
 
   test("outbox publisher correctly runs") {
@@ -81,7 +81,7 @@ class OutboxPublisherSuite extends munit.CatsEffectSuite {
 
     for {
       killswitch <- publisher.run
-      _          <- IO.sleep(2.second)
+      _          <- IO.sleep(1.second)
       _ = assert(dao.Counts.unpublishedStream == 1)
       _ = assert(dao.Counts.setPublished > 0)
       _ = assert(prod.Counts.produce == 5)
@@ -107,5 +107,7 @@ class OutboxPublisherSuite extends munit.CatsEffectSuite {
     assume(dao.Counts.unpublishedStream == 0)
     assume(dao.Counts.setPublished == 0)
     assume(prod.Counts.produce == 0)
+
+    fail("todo")
   }
 }
