@@ -30,12 +30,13 @@ class OutboxPublisher(
 
   def run: IO[KillSwitch[Unit]] = {
     for {
-      _      <- logger.info("run stream...")
-      switch <- Ref.of[IO, Boolean](false)
-      _      <- logger.info("ref initialized, building stream")
-      handle <- buildRestartingAlt(switch).compile.drain.start
-      _      <- logger.info("stream built and started...")
-    } yield KillSwitch("outbox-publisher", switch, handle)
+      sig <- Deferred[IO, Unit]
+      handle <- buildRestartingStream
+        .interruptWhen(sig.get.attempt)
+        .compile
+        .drain
+        .start
+    } yield KillSwitch("outbox-publisher", sig, handle)
   }
 
   protected def buildRestartingStream: Stream[IO, Unit] = {
@@ -44,10 +45,12 @@ class OutboxPublisher(
         pCfg.rate,
         dampen = true,
       ) >> outboxRecordDao.unpublishedStream.take(pCfg.maxMessages))
-      .loggedShow(LogLevel.Info)
-      .through(publishAndWriteback)
+      .loggedShow(LogLevel.Trace)
+      .through(uncancelablePublishAndWriteback)
       .recoverWith { case NonFatal(t) =>
-        buildRestartingStream
+        Stream.exec(
+          logger.warn(s"Stream failed due to $t. Restarting..."),
+        ) ++ buildRestartingStream
       }
   }
 
@@ -72,14 +75,37 @@ class OutboxPublisher(
         pCfg.maxMessages,
       )
       .loggedShow(LogLevel.Info)
-      .through(publishAndWriteback)
+      .through(uncancelablePublishAndWriteback)
       .recoverWith { case NonFatal(t) =>
         buildRestartingAlt(sigTerm)
       }
 
-  protected def cancelableDelay = {
-    IO.sleep(pCfg.rate)
-  }
+  protected val uncancelablePublishAndWriteback: Pipe[IO, OutboxRecord, Unit] =
+    _.groupWithin(10, 100.millis).evalMap { records =>
+      records.toNel match
+        case Some(recordsNel) =>
+          val prodRecs =
+            ProducerRecords.chunk(records.map(encoder), recordsNel.map(_.id))
+          IO.uncancelable { _ =>
+            for {
+              producerResult <- kafkaProducer
+                .produce(prodRecs)
+                .flatten
+                .onError { t =>
+                  logger.error(s"Failed to publish records $records: $t")
+                }
+              _ <- logger.trace(
+                s"Outbox published ${producerResult.records.size} records",
+              )
+              ids = producerResult.passthrough
+              count <- outboxRecordDao.setPublished(ids).onError { t =>
+                logger.error(s"Failed to write back published records: $t")
+              }
+              _ <- logger.trace(s"Outbox committed $count records as published")
+            } yield ()
+          }
+        case None => logger.warn("Received empty chunk to commit")
+    }
 
   protected val publishAndWriteback: Pipe[IO, OutboxRecord, Unit] =
     _.map { rec => ProducerRecords.one(encoder(rec), rec) }

@@ -6,4 +6,11 @@ import scala.concurrent.duration.DurationInt
 import cats.implicits.*
 import cats.syntax.all.*
 
-Stream(1, 2, 3).covary[IO].meteredStartImmediately(500.millis).groupWithin(2, 1.second).evalMap(_.map(IO.println).sequence).compile.drain.unsafeRunSync()
+val s = Stream(1, 2, 3).covary[IO].evalMap { n => IO.println(s"num: $n") }
+
+
+val t = Stream.exec(IO.println("STARTING")) ++ s ++ Stream.eval(IO.println("ENDING"))
+
+val res: IO[Unit] = t.compile.drain
+
+res.unsafeRunSync()
