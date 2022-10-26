@@ -17,6 +17,8 @@ import fs2.*
 
 trait OutboxRecordDAO {
 
+  def insert(record: OutboxRecord): Update0
+
   def unpublishedStream: Stream[IO, OutboxRecord]
 
   def setPublished(
@@ -28,6 +30,9 @@ trait OutboxRecordDAO {
 private[dao] class OutboxRecordDAOImpl(xa: Transactor[IO])(using
     cfg: OutboxConfig,
 ) extends OutboxRecordDAO {
+
+  override def insert(record: OutboxRecord): Update0 =
+    sql"INSERT INTO ${cfg.outboxTableName}(topic, key, value, created_ts, published_ts) VALUES $record".update
 
   override lazy val unpublishedStream: Stream[IO, OutboxRecord] =
     sql"""SELECT * FROM ${cfg.outboxTableName}

@@ -7,16 +7,16 @@ final case class OutboxPublisherConfig(
     rate: FiniteDuration,
     maxMessages: Int,
     publisherParallelism: Int,
-    writebackChunkSize: Int,
-    writebackMaxDelay: FiniteDuration,
+    publishBatchSize: Int,
+    publishMaxDelay: FiniteDuration,
 )
 
 object OutboxPublisherConfig {
-  val Default = OutboxPublisherConfig(
+  val Default: OutboxPublisherConfig = OutboxPublisherConfig(
     rate = 20.seconds,
     maxMessages = 1_000,
     publisherParallelism = 1,
-    writebackChunkSize = 20,
-    writebackMaxDelay = 200.millis,
+    publishBatchSize = 20,
+    publishMaxDelay = 200.millis,
   )
 }

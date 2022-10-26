@@ -15,7 +15,10 @@ import doobie.util.Write
 import doobie.util.transactor.Transactor
 import fs2.kafka.{Headers, Serializer}
 
-class OutboxImpl[F[_]: MonadCancelThrow](xa: Transactor[F], outboxRecordDao: OutboxRecordDAO)(using
+class OutboxImpl[F[_]: MonadCancelThrow](
+    xa: Transactor[F],
+    outboxRecordDao: OutboxRecordDAO,
+)(using
     cfg: OutboxConfig,
 ) {
 
@@ -36,10 +39,10 @@ class OutboxImpl[F[_]: MonadCancelThrow](xa: Transactor[F], outboxRecordDao: Out
       businessRes <- {
         for {
           businessRes <- write
-          recordId    <- record.writeAutoInc.run
-        } yield (businessRes)
+          _           <- outboxRecordDao.insert(record).run
+        } yield businessRes
       }.transact(xa)
-    } yield (businessRes)
+    } yield businessRes
   }
 
 }

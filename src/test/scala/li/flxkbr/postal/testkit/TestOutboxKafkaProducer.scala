@@ -10,7 +10,7 @@ import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.clients.producer.internals.ProducerMetadata
 import org.apache.kafka.common.TopicPartition
 
-class TestOutboxKafkaProducer(failingInvokation: Int => Boolean = _ => false)
+class TestOutboxKafkaProducer(failingInvocation: Int => Boolean = _ => false)
     extends OutboxKafkaProducer {
 
   object Counts {
@@ -22,8 +22,8 @@ class TestOutboxKafkaProducer(failingInvokation: Int => Boolean = _ => false)
       records: ProducerRecords[P, Option[Array[Byte]], Array[Byte]],
   ): IO[IO[ProducerResult[P, Option[Array[Byte]], Array[Byte]]]] = {
     Counts.produce = Counts.produce + 1
-
-    if failingInvokation(Counts.produce) then IO.raiseError(Exception("boom"))
+    println(s"Calling OutboxKafkaProducer.produce, count ${Counts.produce}")
+    if failingInvocation(Counts.produce) then IO.raiseError(Exception("boom"))
     else
       Counts.producedRecords = Counts.producedRecords + records.records.size
       val prs = records.records.map { record =>
@@ -35,8 +35,8 @@ class TestOutboxKafkaProducer(failingInvokation: Int => Boolean = _ => false)
             0,
             record.timestamp.getOrElse(0),
             Random.nextLong(),
-            record.key.map(_.size).getOrElse(0),
-            record.value.size,
+            record.key.map(_.length).getOrElse(0),
+            record.value.length,
           ),
         )
       }
